@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+
+  # ── Model Training (one-shot) ──────────────────────────────────────────────
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: python -m model.train
+    volumes:
+      - artifacts:/app/artifacts
+    profiles: ["train"]           # only runs with: docker-compose --profile train up
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - artifacts:/app/artifacts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # ── Streamlit UI ───────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      - API_BASE=http://api:8000
+
+volumes:
+  artifacts:
